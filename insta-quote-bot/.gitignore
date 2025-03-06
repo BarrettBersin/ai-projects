@@ -10,3 +10,4 @@ output.png
 # Python bytecode (optional, since root covers it)
 __pycache__/
 *.pyc
+temp_images/
