@@ -1,0 +1,12 @@
+# Secrets
+.env
+
+# Generated files
+output.png
+
+# macOS junk
+.DS_Store
+
+# Python bytecode (optional, since root covers it)
+__pycache__/
+*.pyc

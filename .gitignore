@@ -1,0 +1,12 @@
+# macOS junk
+.DS_Store
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual envs (if you ever create one here)
+venv/
+env/
