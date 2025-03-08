@@ -40,7 +40,7 @@ def generate_spiritual_quote():
                 {"role": "system", "content": "You are a spiritual guide."},
                 {"role": "user", "content": f"Short, impactful quote from {selected_teacher}. Quote and teacher name only, separated by ' - '."}
             ],
-            temperature=0.7
+            temperature=0.95
         )
         return completion.choices[0].message.content
     except Exception as e:
@@ -135,7 +135,7 @@ def overlay_quote_on_image(quote, output_dir="/Users/BadBerries/ai-projects/inst
     # Load font with fallback
     try:
         font_path = "Arial.ttf"  # Change to your font file path if needed
-        font_size = 80  # Start with a large font
+        font_size = 120  # Start with a large font
         font = ImageFont.truetype(font_path, font_size)
     except:
         font = ImageFont.load_default()
@@ -162,20 +162,19 @@ def overlay_quote_on_image(quote, output_dir="/Users/BadBerries/ai-projects/inst
         else:
             img = teacher_img.resize((1080, 1080), Image.Resampling.LANCZOS).convert("RGBA")
 
-        # Prepare text wrapping
+        # Prepare text
         draw = ImageDraw.Draw(img)
-        max_width = int(img.width * 0.9)  # 90% of the image width
-        wrapped_text = textwrap.fill(quote_text, width=40)  # Initial wrapping
-        full_text = f"{wrapped_text}\n- {teacher}"
+        max_width = int(img.width * 0.95)  # 95% of the image width
+        full_text = f"{quote_text}\n- {teacher}"
 
-        # Dynamically adjust font size to maximize text area
-        while font.getbbox(full_text)[2] > max_width and font_size > 10:  # Prevent infinite loop
-            font_size -= 2
+        # Dynamically adjust font size for maximum width
+        while font.getbbox(full_text)[2] > max_width and font_size > 30:  # Prevent infinite loop
+            font_size -= 5
             font = ImageFont.truetype(font_path, font_size)
 
         # If text is too small, increase it
-        while font.getbbox(full_text)[2] < max_width * 0.8 and font_size < 120:  # Make text larger if it fits
-            font_size += 2
+        while font.getbbox(full_text)[2] < max_width * 0.8 and font_size < 180:  # Ensure text fills width
+            font_size += 5
             font = ImageFont.truetype(font_path, font_size)
 
         # Get text bounding box
@@ -185,11 +184,11 @@ def overlay_quote_on_image(quote, output_dir="/Users/BadBerries/ai-projects/inst
 
         # Position text near the bottom
         text_x = (img.width - text_width) // 2
-        text_y = img.height - text_height - 100  # Adjust so it doesn't get cut off
+        text_y = img.height - text_height - 80  # Adjust so it doesn't get cut off
 
         # Ensure text doesn't go out of bounds
-        if text_y < img.height * 0.7:
-            text_y = int(img.height * 0.7)
+        if text_y < img.height * 0.65:
+            text_y = int(img.height * 0.65)
 
         # Ensure both images are in RGBA mode before alpha compositing
         img = img.convert("RGBA")  
@@ -197,7 +196,7 @@ def overlay_quote_on_image(quote, output_dir="/Users/BadBerries/ai-projects/inst
         overlay_draw = ImageDraw.Draw(overlay)
 
         # Draw a semi-transparent rectangle as background
-        rect_padding = 20
+        rect_padding = 30
         rect_x1 = text_x - rect_padding
         rect_y1 = text_y - rect_padding
         rect_x2 = text_x + text_width + rect_padding
@@ -219,6 +218,8 @@ def overlay_quote_on_image(quote, output_dir="/Users/BadBerries/ai-projects/inst
         # Save the image
         img.save(output_path)
         print(f"Image saved as {output_path}")
+
+
 
 
 
