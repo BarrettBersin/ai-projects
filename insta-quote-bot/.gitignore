@@ -11,3 +11,4 @@ output.png
 __pycache__/
 *.pyc
 temp_images/
+outputs/
