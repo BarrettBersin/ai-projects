@@ -1,7 +1,6 @@
 import sys
 import os
 import random
-import textwrap
 import requests
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -12,7 +11,7 @@ from io import BytesIO
 # Load environment variables
 load_dotenv()
 
-# OpenAI setup (for quote and DALL·E 3 image generation)
+# OpenAI setup (for quote generation only)
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     raise ValueError("OPENAI_API_KEY not set in .env")
@@ -21,11 +20,11 @@ openai_client = OpenAI(api_key=openai_api_key)
 # Stability AI setup (for Stable Diffusion Ultra)
 stability_api_key = os.getenv("STABILITY_API_KEY")
 if not stability_api_key:
-    print("Warning: STABILITY_API_KEY not set; Stable Diffusion will be skipped.")
+    raise ValueError("STABILITY_API_KEY not set in .env")
 
 # Spiritual teachers
 spiritual_teachers = [
-    "Neville Goddard", "Buddha", "Jesus", "Robert Hawkins", 
+    "Neville Goddard", "Buddha", "Jesus", "David R. Hawkins", 
     "Eckhart Tolle", "Ram Dass", "Florence Scovel Shinn",
     "Hermes Trismegistus"
 ]
@@ -79,10 +78,6 @@ def send_generation_request(host, params, files=None):
 
 def generate_stable_diffusion_image(teacher):
     """Generates an image using Stability AI's Stable Image Ultra (v2beta)."""
-    if not stability_api_key:
-        print("Stability API key missing; skipping Stable Diffusion.")
-        return None
-    
     host = "https://api.stability.ai/v2beta/stable-image/generate/ultra"
     params = {
         "prompt": f"A photorealistic portrait of {teacher}",
@@ -103,34 +98,20 @@ def generate_stable_diffusion_image(teacher):
         print(f"Error generating Stable Diffusion image for {teacher}: {e}")
         return None
 
-def generate_openai_image(teacher):
-    """Generates an image using OpenAI's DALL·E 3."""
-    try:
-        response = openai_client.images.generate(
-            model="dall-e-3",
-            prompt=f"A photorealistic portrait of {teacher}",
-            size="1024x1024",
-            quality="standard",
-            n=1
-        )
-        image_url = response.data[0].url
-        image_response = requests.get(image_url, stream=True)
-        image_response.raise_for_status()
-        return Image.open(image_response.raw).convert("RGBA")
-    except Exception as e:
-        print(f"Error generating OpenAI image for {teacher}: {e}")
-        return None
-
-# import textwrap
-
 def overlay_quote_on_image(quote, output_dir="/Users/BadBerries/ai-projects/insta-quote-bot/outputs"):
-    """Overlays a quote on images from OpenAI and Stability AI, placing the text near the bottom with a semi-transparent background."""
+    """Overlays a quote on an image from Stability AI, placing the text near the bottom with a semi-transparent background."""
     try:
         quote_text, teacher = quote.split(" - ", 1)
     except ValueError:
         quote_text, teacher = quote, "Unknown"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    source_dir = os.path.join(output_dir, "stable_diffusion")
+    os.makedirs(source_dir, exist_ok=True)
+    
+    # Define output filename
+    output_filename = f"quote_{teacher}_{timestamp}.png"
+    output_path = os.path.join(source_dir, output_filename)
 
     # Load font with fallback
     try:
@@ -140,88 +121,70 @@ def overlay_quote_on_image(quote, output_dir="/Users/BadBerries/ai-projects/inst
     except:
         font = ImageFont.load_default()
 
-    sources = {
-        "openai": generate_openai_image,
-        "stable_diffusion": generate_stable_diffusion_image
-    }
+    # Generate the image
+    teacher_img = generate_stable_diffusion_image(teacher)
+    if not teacher_img:
+        img = Image.new("RGB", (1080, 1080), color=(50, 50, 50))
+        print(f"Warning: No image found for {teacher} using Stable Diffusion; using blank background.")
+    else:
+        img = teacher_img.resize((1080, 1080), Image.Resampling.LANCZOS).convert("RGBA")
 
-    for source, fetch_func in sources.items():
-        # Create output directory for each source
-        source_dir = os.path.join(output_dir, source)
-        os.makedirs(source_dir, exist_ok=True)
-        
-        # Define output filename
-        output_filename = f"quote_{teacher}_{timestamp}.png"
-        output_path = os.path.join(source_dir, output_filename)
+    # Prepare text
+    draw = ImageDraw.Draw(img)
+    max_width = int(img.width * 0.95)  # 95% of the image width
+    full_text = f"{quote_text}\n- {teacher}"
 
-        # Generate the image
-        teacher_img = fetch_func(teacher)
-        if not teacher_img:
-            img = Image.new("RGB", (1080, 1080), color=(50, 50, 50))
-            print(f"Warning: No image found for {teacher} using {source}; using blank background.")
-        else:
-            img = teacher_img.resize((1080, 1080), Image.Resampling.LANCZOS).convert("RGBA")
+    # Dynamically adjust font size for maximum width
+    while font.getbbox(full_text)[2] > max_width and font_size > 30:  # Prevent infinite loop
+        font_size -= 5
+        font = ImageFont.truetype(font_path, font_size)
 
-        # Prepare text
-        draw = ImageDraw.Draw(img)
-        max_width = int(img.width * 0.95)  # 95% of the image width
-        full_text = f"{quote_text}\n- {teacher}"
+    # If text is too small, increase it
+    while font.getbbox(full_text)[2] < max_width * 0.8 and font_size < 180:  # Ensure text fills width
+        font_size += 5
+        font = ImageFont.truetype(font_path, font_size)
 
-        # Dynamically adjust font size for maximum width
-        while font.getbbox(full_text)[2] > max_width and font_size > 30:  # Prevent infinite loop
-            font_size -= 5
-            font = ImageFont.truetype(font_path, font_size)
+    # Get text bounding box
+    text_bbox = draw.multiline_textbbox((0, 0), full_text, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_height = text_bbox[3] - text_bbox[1]
 
-        # If text is too small, increase it
-        while font.getbbox(full_text)[2] < max_width * 0.8 and font_size < 180:  # Ensure text fills width
-            font_size += 5
-            font = ImageFont.truetype(font_path, font_size)
+    # Position text near the bottom
+    text_x = (img.width - text_width) // 2
+    text_y = img.height - text_height - 80  # Adjust so it doesn't get cut off
 
-        # Get text bounding box
-        text_bbox = draw.multiline_textbbox((0, 0), full_text, font=font)
-        text_width = text_bbox[2] - text_bbox[0]
-        text_height = text_bbox[3] - text_bbox[1]
+    # Ensure text doesn't go out of bounds
+    if text_y < img.height * 0.65:
+        text_y = int(img.height * 0.65)
 
-        # Position text near the bottom
-        text_x = (img.width - text_width) // 2
-        text_y = img.height - text_height - 80  # Adjust so it doesn't get cut off
+    # Ensure image is in RGBA mode before alpha compositing
+    img = img.convert("RGBA")  
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
 
-        # Ensure text doesn't go out of bounds
-        if text_y < img.height * 0.65:
-            text_y = int(img.height * 0.65)
+    # Draw a semi-transparent rectangle as background
+    rect_padding = 30
+    rect_x1 = text_x - rect_padding
+    rect_y1 = text_y - rect_padding
+    rect_x2 = text_x + text_width + rect_padding
+    rect_y2 = text_y + text_height + rect_padding
 
-        # Ensure both images are in RGBA mode before alpha compositing
-        img = img.convert("RGBA")  
-        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        overlay_draw = ImageDraw.Draw(overlay)
+    rectangle_color = (0, 0, 0, 180)  # Semi-transparent black
+    overlay_draw.rectangle([rect_x1, rect_y1, rect_x2, rect_y2], fill=rectangle_color)
 
-        # Draw a semi-transparent rectangle as background
-        rect_padding = 30
-        rect_x1 = text_x - rect_padding
-        rect_y1 = text_y - rect_padding
-        rect_x2 = text_x + text_width + rect_padding
-        rect_y2 = text_y + text_height + rect_padding
+    # Convert overlay to RGBA before merging
+    overlay = overlay.convert("RGBA")  
 
-        rectangle_color = (0, 0, 0, 180)  # Semi-transparent black
-        overlay_draw.rectangle([rect_x1, rect_y1, rect_x2, rect_y2], fill=rectangle_color)
+    # Merge overlay onto image
+    img = Image.alpha_composite(img, overlay)
 
-        # Convert overlay to RGBA before merging
-        overlay = overlay.convert("RGBA")  
+    # Draw the quote text on top of the background
+    draw = ImageDraw.Draw(img)
+    draw.multiline_text((text_x, text_y), full_text, font=font, fill=(255, 255, 255), align="center")
 
-        # Merge overlay onto image
-        img = Image.alpha_composite(img, overlay)
-
-        # Draw the quote text on top of the background
-        draw = ImageDraw.Draw(img)
-        draw.multiline_text((text_x, text_y), full_text, font=font, fill=(255, 255, 255), align="center")
-
-        # Save the image
-        img.save(output_path)
-        print(f"Image saved as {output_path}")
-
-
-
-
+    # Save the image
+    img.save(output_path)
+    print(f"Image saved as {output_path}")
 
 if __name__ == "__main__":
     quote = generate_spiritual_quote()
